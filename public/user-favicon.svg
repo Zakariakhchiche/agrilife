@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2E7D32;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="256" fill="#f8f9fa"/>
+  <g transform="translate(128, 64)">
+    <!-- Tête -->
+    <circle cx="128" cy="128" r="64" fill="url(#grad1)"/>
+    <!-- Corps -->
+    <path d="M128 192 L128 320 Q128 384 64 448 L192 448 Q128 384 128 320 Z" fill="url(#grad1)"/>
+    <!-- Symbole € -->
+    <text x="108" y="144" font-family="Arial" font-size="48" fill="#E8F5E9">€</text>
+    <!-- Documents/Papiers -->
+    <g transform="translate(160, 240) rotate(15)">
+      <rect width="80" height="100" fill="#E8F5E9"/>
+      <line x1="16" y1="20" x2="64" y2="20" stroke="#2E7D32" stroke-width="4"/>
+      <line x1="16" y1="40" x2="64" y2="40" stroke="#2E7D32" stroke-width="4"/>
+      <line x1="16" y1="60" x2="64" y2="60" stroke="#2E7D32" stroke-width="4"/>
+    </g>
+    <g transform="translate(140, 250) rotate(5)">
+      <rect width="80" height="100" fill="#E8F5E9"/>
+      <line x1="16" y1="20" x2="64" y2="20" stroke="#2E7D32" stroke-width="4"/>
+      <line x1="16" y1="40" x2="64" y2="40" stroke="#2E7D32" stroke-width="4"/>
+      <line x1="16" y1="60" x2="64" y2="60" stroke="#2E7D32" stroke-width="4"/>
+    </g>
+  </g>
+</svg>

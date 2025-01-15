@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+@layer base {
+  .dark {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  .chat-bubble {
+    @apply bg-neutral text-neutral-content max-w-prose;
+  }
+
+  .chat-bubble.ai {
+    @apply bg-primary text-primary-content;
+  }
+
+  .chat-input {
+    @apply input input-bordered w-full;
+  }
+
+  .message-content {
+    @apply prose dark:prose-invert max-w-none;
+  }
+}
+
+::-webkit-scrollbar {
+  @apply w-1 bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-neutral dark:bg-neutral-focus rounded-xl;
+}
