@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Terre/Sol -->
+  <path d="M2 24 H30 Q31 24 31 23 L31 28 Q31 30 29 30 L3 30 Q1 30 1 28 L1 23 Q1 24 2 24" fill="#8B4513"/>
+  
+  <!-- Plante principale -->
+  <path d="M14 24 Q14 14 16 8 Q18 14 18 24" stroke="#2F7A1F" stroke-width="2" fill="none"/>
+  
+  <!-- Feuilles -->
+  <path d="M16 12 Q19 10 21 11 Q19 12 16 14" fill="#4CAF50"/>
+  <path d="M16 12 Q13 10 11 11 Q13 12 16 14" fill="#4CAF50"/>
+  <path d="M16 16 Q20 14 22 15 Q20 16 16 18" fill="#4CAF50"/>
+  <path d="M16 16 Q12 14 10 15 Q12 16 16 18" fill="#4CAF50"/>
+  
+  <!-- Racines -->
+  <path d="M14 24 Q12 26 10 27" stroke="#8B4513" stroke-width="1"/>
+  <path d="M18 24 Q20 26 22 27" stroke="#8B4513" stroke-width="1"/>
+  <path d="M16 24 Q16 26 16 28" stroke="#8B4513" stroke-width="1"/>
+  
+  <!-- Soleil -->
+  <circle cx="26" cy="6" r="4" fill="#FFD700"/>
+  <path d="M26 0 L26 2 M26 10 L26 12 M20 6 L22 6 M30 6 L32 6 M22 2 L23.5 3.5 M28.5 8.5 L30 10 M22 10 L23.5 8.5 M28.5 3.5 L30 2" stroke="#FFD700"/>
+  
+  <!-- Gouttes d'eau -->
+  <path d="M8 4 Q8 6 7 7 Q6 6 6 4 Q6 3 7 2 Q8 3 8 4" fill="#4F9FE3"/>
+  <path d="M11 7 Q11 9 10 10 Q9 9 9 7 Q9 6 10 5 Q11 6 11 7" fill="#4F9FE3"/>
+</svg>
