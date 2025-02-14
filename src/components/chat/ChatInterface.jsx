@@ -86,42 +86,46 @@ const ChatInterface = ({ farmData, setFarmData }) => {
     'Lille', 'Nantes', 'Strasbourg', 'Rennes', 'Montpellier'
   ];
 
-  const handleLocationSearch = async (location) => {
+  const handleLocationSearch = async (input) => {
+    console.log('🔍 Recherche de la commune:', input);
     try {
-      console.log('🔍 Recherche de la commune:', location);
-      const communes = await searchCommune(location);
-      
-      if (communes && communes.length > 0) {
-        const commune = communes[0];
-        console.log('📍 Commune trouvée:', commune);
+      // Coordonnées hardcodées pour les communes courantes
+      const commonCities = {
+        'brou': { nom: 'Brou', coordinates: [1.1667, 48.2167] },
+        'paris': { nom: 'Paris', coordinates: [2.3522, 48.8566] },
+        'lyon': { nom: 'Lyon', coordinates: [4.8357, 45.7640] },
+        'marseille': { nom: 'Marseille', coordinates: [5.3698, 43.2965] }
+      };
+
+      const searchInput = input.toLowerCase().trim();
+      let communeData;
+
+      if (commonCities[searchInput]) {
+        communeData = commonCities[searchInput];
+      } else {
+        // Appel à l'API geo.api.gouv.fr
+        const response = await fetch(`https://geo.api.gouv.fr/communes?nom=${searchInput}&boost=population&limit=1`);
+        if (!response.ok) throw new Error('Erreur lors de la requête API');
         
-        // Sauvegarder les données de la commune
-        setContextData(prev => ({
-          ...prev,
-          commune: commune,
-          climate: {
-            temperature: 15,
-            precipitation: 800,
-            description: "Climat tempéré"
-          }
-        }));
+        const data = await response.json();
+        if (data.length === 0) throw new Error('Commune non trouvée');
         
-        // Sauvegarder dans le localStorage
-        localStorage.setItem('contextData', JSON.stringify({
-          ...contextData,
-          commune: commune,
-          climate: {
-            temperature: 15,
-            precipitation: 800,
-            description: "Climat tempéré"
-          }
-        }));
-        
-        return true;
+        communeData = {
+          nom: data[0].nom,
+          coordinates: [data[0].centre.coordinates[0], data[0].centre.coordinates[1]]
+        };
       }
-      return false;
+
+      // Mise à jour du contexte avec les informations de la commune
+      setContextData(prev => ({
+        ...prev,
+        commune: communeData
+      }));
+
+      return true;
     } catch (error) {
-      console.error('❌ Erreur lors de la recherche:', error);
+      console.error(' ❌ Erreur lors de la recherche:', error);
+      setInputError("Commune non trouvée. Veuillez réessayer.");
       return false;
     }
   };
