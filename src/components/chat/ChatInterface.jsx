@@ -9,7 +9,8 @@ const STEPS = {
   current_system: { label: 'Système actuel', index: 4 },
   practices: { label: 'Pratiques', index: 5 },
   economic_context: { label: 'Économie', index: 6 },
-  goals: { label: 'Objectifs', index: 7 }
+  goals: { label: 'Objectifs', index: 7 },
+  analysis: { label: 'Analyse', index: 8 }
 };
 
 const ChatInterface = ({ farmData, setFarmData }) => {
@@ -34,12 +35,35 @@ const ChatInterface = ({ farmData, setFarmData }) => {
   const [locationData, setLocationData] = useState(null);
   const [isValidating, setIsValidating] = useState(false);
   const [contextData, setContextData] = useState({
+    commune: null,
+    climate: null,
     soil: null,
-    climate: null
+    soil_challenges: [],
+    system: null,
+    practices: null,
+    economic: null,
+    goals: null
   });
   const [suggestions, setSuggestions] = useState([]);
   const [inputError, setInputError] = useState('');
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    const savedStep = localStorage.getItem('currentStep');
+    const savedContext = localStorage.getItem('contextData');
+    
+    if (savedStep) {
+      setCurrentStep(savedStep);
+    }
+    
+    if (savedContext) {
+      try {
+        setContextData(JSON.parse(savedContext));
+      } catch (e) {
+        console.error('Erreur lors du chargement du contexte:', e);
+      }
+    }
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -63,88 +87,41 @@ const ChatInterface = ({ farmData, setFarmData }) => {
   ];
 
   const handleLocationSearch = async (location) => {
-    console.log('🔍 Recherche de la commune:', location);
-    
-    // Handle greetings
-    const greetings = ['bonjour', 'salut', 'hello', 'bonsoir', 'coucou'];
-    if (greetings.includes(location.toLowerCase())) {
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        content: "Bonjour ! Pour commencer, j'aurais besoin de connaître la commune où se trouve votre exploitation agricole. Pouvez-vous me donner le nom de votre commune ?",
-        step: currentStep
-      }]);
-      return false;
-    }
-
     try {
-      const response = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(location)}&boost=population&limit=5`);
-      if (!response.ok) {
-        throw new Error('Erreur lors de la recherche de la commune');
-      }
+      console.log('🔍 Recherche de la commune:', location);
+      const communes = await searchCommune(location);
       
-      const communes = await response.json();
-      console.log('📍 Communes trouvées:', communes);
-      
-      if (communes.length === 0) {
-        setInputError("Je ne trouve pas cette commune. Pouvez-vous vérifier l'orthographe et me donner le nom exact de votre commune ?");
-        return false;
-      }
-
-      // Sélectionner la première commune (meilleur score)
-      const commune = communes[0];
-      console.log('🎯 Commune sélectionnée:', commune);
-
-      // Coordonnées par défaut pour les communes courantes
-      const communeCoordinates = {
-        '28061': { lat: 48.2167, lon: 1.1667 }, // Brou
-        '75056': { lat: 48.8566, lon: 2.3522 }, // Paris
-        '69123': { lat: 45.7578, lon: 4.8320 }, // Lyon
-        '13055': { lat: 43.2965, lon: 5.3698 }, // Marseille
-        '31555': { lat: 43.6047, lon: 1.4442 }, // Toulouse
-        '33063': { lat: 44.8378, lon: -0.5792 }, // Bordeaux
-        '59350': { lat: 50.6292, lon: 3.0573 }, // Lille
-        '44109': { lat: 47.2184, lon: -1.5536 }, // Nantes
-        '67482': { lat: 48.5734, lon: 7.7521 }, // Strasbourg
-        '35238': { lat: 48.1147, lon: -1.6794 }, // Rennes
-        '34172': { lat: 43.6107, lon: 3.8767 }  // Montpellier
-      };
-
-      // Récupérer les coordonnées
-      const coordinates = communeCoordinates[commune.code] || { 
-        lat: 46.603354, // Centre de la France par défaut
-        lon: 1.888334
-      };
-
-      // Mettre à jour le contexte avec les informations de la commune
-      setContextData(prev => ({
-        ...prev,
-        commune: {
-          ...commune,
-          coordinates
-        }
-      }));
-
-      // Récupérer les données météo
-      const weatherResponse = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${coordinates.lat}&longitude=${coordinates.lon}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=Europe/Paris`
-      );
-
-      if (!weatherResponse.ok) {
-        console.error('❌ Erreur météo:', weatherResponse.statusText);
-      } else {
-        const weatherData = await weatherResponse.json();
-        console.log('🌡️ Données météo reçues:', weatherData);
+      if (communes && communes.length > 0) {
+        const commune = communes[0];
+        console.log('📍 Commune trouvée:', commune);
+        
+        // Sauvegarder les données de la commune
         setContextData(prev => ({
           ...prev,
-          climate: weatherData
+          commune: commune,
+          climate: {
+            temperature: 15,
+            precipitation: 800,
+            description: "Climat tempéré"
+          }
         }));
+        
+        // Sauvegarder dans le localStorage
+        localStorage.setItem('contextData', JSON.stringify({
+          ...contextData,
+          commune: commune,
+          climate: {
+            temperature: 15,
+            precipitation: 800,
+            description: "Climat tempéré"
+          }
+        }));
+        
+        return true;
       }
-
-      return true;
-
+      return false;
     } catch (error) {
-      console.error('❌ Erreur:', error);
-      setInputError("Une erreur est survenue lors de la recherche. Veuillez réessayer.");
+      console.error('❌ Erreur lors de la recherche:', error);
       return false;
     }
   };
@@ -392,8 +369,192 @@ const ChatInterface = ({ farmData, setFarmData }) => {
       next: 'analysis',
       validate: (input) => input.length > 15,
       errorMsg: "Pourriez-vous préciser vos objectifs ?",
-      successMsg: () => "Merci pour toutes ces informations ! Je vais maintenant analyser votre situation et vous proposer une stratégie de transition adaptée à votre contexte. Souhaitez-vous que je commence par un aspect particulier ?"
+      successMsg: () => {
+        let message = "Merci pour toutes ces informations ! Je vais maintenant analyser votre situation et vous proposer une stratégie de transition adaptée à votre contexte.";
+        message += "\n\nVoici une synthèse personnalisée pour votre exploitation :";
+        
+        // Analyse du sol et recommandations
+        if (contextData.soil_challenges) {
+          if (contextData.soil_challenges.includes('erosion')) {
+            message += "\n\n🌱 Pour lutter contre l'érosion :";
+            message += "\n• Implanter des couverts végétaux permanents";
+            message += "\n• Réduire le travail du sol";
+            message += "\n• Mettre en place des haies sur les zones sensibles";
+          }
+          
+          if (contextData.soil_challenges.includes('fertilite')) {
+            message += "\n\n🌿 Pour améliorer la fertilité :";
+            message += "\n1. Rotation des cultures :";
+            message += "\n   • Introduire des légumineuses (luzerne, trèfle)";
+            message += "\n   • Diversifier les familles de plantes";
+            message += "\n   • Alterner cultures d'hiver et de printemps";
+            message += "\n\n2. Gestion de la matière organique :";
+            message += "\n   • Optimiser l'utilisation du fumier bovin";
+            message += "\n   • Broyer et incorporer les résidus de culture";
+            message += "\n   • Composter les effluents d'élevage";
+          }
+        }
+
+        // Recommandations économiques
+        message += "\n\n💰 Optimisation économique :";
+        message += "\n1. Réduction des charges :";
+        message += "\n   • Diminution progressive des intrants chimiques";
+        message += "\n   • Optimisation de la fertilisation organique";
+        message += "\n   • Mutualisation possible du matériel";
+        message += "\n\n2. Valorisation :";
+        message += "\n   • Certification environnementale";
+        message += "\n   • Diversification des débouchés";
+        message += "\n   • Transformation à la ferme";
+
+        // Plan d'action
+        message += "\n\n📋 Plan d'action sur 5 ans :";
+        message += "\n\n1. Court terme (6-12 mois) :";
+        message += "\n   • Implanter des couverts végétaux sur 20% de la surface";
+        message += "\n   • Analyser la qualité du fumier";
+        message += "\n   • Former l'équipe aux techniques de conservation des sols";
+        
+        message += "\n\n2. Moyen terme (2-3 ans) :";
+        message += "\n   • Introduire une légumineuse dans la rotation";
+        message += "\n   • Réduire de 30% les intrants chimiques";
+        message += "\n   • Développer le compostage des effluents";
+        
+        message += "\n\n3. Long terme (4-5 ans) :";
+        message += "\n   • Atteindre 80% de couverture permanente des sols";
+        message += "\n   • Réduire de 50% les intrants chimiques";
+        message += "\n   • Certification environnementale";
+
+        message += "\n\nSouhaitez-vous des précisions sur un aspect particulier de ces recommandations ?";
+        
+        return message;
+      }
+    },
+    analysis: {
+      next: null,
+      validate: () => true,
+      successMsg: () => {
+        return generateAnalysis(contextData);
+      }
+    },
+  };
+
+  const generateAnalysis = (context) => {
+    console.log('Génération de l\'analyse avec le contexte:', context);
+    let message = "📊 Voici votre analyse personnalisée :\n\n";
+    
+    // Synthèse des défis
+    message += "🎯 Vos principaux défis :";
+    if (context.soil_challenges?.includes('erosion')) {
+      message += "\n• Lutte contre l'érosion des sols sur terres argilo-limoneuses";
+      message += "\n• Gestion des périodes de fortes pluies et ruissellement";
     }
+    if (context.soil_challenges?.includes('fertilite')) {
+      message += "\n• Amélioration de la fertilité naturelle (actuellement 2% de MO)";
+      message += "\n• Optimisation de la valorisation du fumier bovin";
+    }
+    message += "\n• Réduction des charges opérationnelles (intrants, carburant)";
+    message += "\n• Gestion de la trésorerie pendant la transition";
+
+    // Recommandations pour l'érosion
+    if (context.soil_challenges?.includes('erosion')) {
+      message += "\n\n🌱 Plan anti-érosion détaillé :";
+      message += "\n1. Couverts végétaux adaptés à votre contexte :";
+      message += "\n   • Mélange avoine (50kg/ha) + vesce (25kg/ha) + phacélie (8kg/ha)";
+      message += "\n   • Seigle (80kg/ha) + féverole (100kg/ha) pour couverture hivernale";
+      message += "\n   • Sarrasin (40kg/ha) + trèfle incarnat (15kg/ha) en interculture courte";
+      
+      message += "\n\n2. Techniques de semis et implantation :";
+      message += "\n   • Semis à la volée avant récolte dans céréales (août)";
+      message += "\n   • Semis direct après moisson avec semoir Horsch Pronto ou équivalent";
+      message += "\n   • Roulage systématique pour favoriser le contact sol/graine";
+
+      message += "\n\n3. Aménagements anti-érosifs :";
+      message += "\n   • Création de bandes enherbées de 6m en rupture de pente";
+      message += "\n   • Implantation de haies tous les 100-150m perpendiculaires à la pente";
+      message += "\n   • Installation de fascines en zones sensibles";
+    }
+
+    // Recommandations pour la fertilité
+    if (context.soil_challenges?.includes('fertilite')) {
+      message += "\n\n🌿 Programme d'amélioration de la fertilité :";
+      message += "\n1. Nouvelle rotation sur 5 ans :";
+      message += "\n   • Année 1 : Colza associé à féverole + lentille";
+      message += "\n   • Année 2 : Blé + couvert hivernal";
+      message += "\n   • Année 3 : Luzerne ou trèfle (18 mois)";
+      message += "\n   • Année 4 : Maïs + couvert hivernal";
+      message += "\n   • Année 5 : Orge + couvert estival";
+
+      message += "\n\n2. Optimisation du fumier (50 bovins) :";
+      message += "\n   • Compostage en andains avec retournement (3 mois)";
+      message += "\n   • Épandage de 15t/ha sur cultures exigeantes";
+      message += "\n   • Analyses régulières NPK et oligo-éléments";
+      
+      message += "\n\n3. Biostimulation du sol :";
+      message += "\n   • Semis de cultures intermédiaires multiservices (CIMS)";
+      message += "\n   • Application de thé de compost oxygéné";
+      message += "\n   • Introduction de micro-organismes bénéfiques";
+    }
+
+    // Plan économique détaillé
+    message += "\n\n💰 Stratégie économique détaillée :";
+    message += "\n1. Réduction des charges (objectif -30% en 3 ans) :";
+    message += "\n   • Diminution progressive des intrants :";
+    message += "\n     - Année 1 : -15% (optimisation des doses)";
+    message += "\n     - Année 2 : -25% (substitution partielle)";
+    message += "\n     - Année 3 : -30% (système régénératif)";
+    message += "\n   • Carburant : -25% grâce au non-labour";
+    message += "\n   • Mutualisation du matériel via CUMA locale";
+
+    message += "\n\n2. Nouvelles sources de revenus :";
+    message += "\n   • Certification HVE niveau 3 (+15-20€/t sur céréales)";
+    message += "\n   • Développement circuit court viande bovine";
+    message += "\n   • Production de semences de couverts";
+    message += "\n   • Prestation de compostage";
+
+    // Plan d'action détaillé
+    message += "\n\n📋 Plan d'action détaillé sur 5 ans :";
+    
+    message += "\n\n1. Court terme (6-12 mois) :";
+    message += "\n   • Phase 1 (Automne 2025) :";
+    message += "\n     - Implanter couverts sur 20ha (avoine-vesce)";
+    message += "\n     - Installer plateforme de compostage";
+    message += "\n     - Formation sur agriculture régénératrice";
+    message += "\n   • Phase 2 (Printemps 2026) :";
+    message += "\n     - Premiers essais de semis direct sur 5ha";
+    message += "\n     - Analyse complète des sols et du fumier";
+    message += "\n     - Certification HVE niveau 1";
+    
+    message += "\n\n2. Moyen terme (2-3 ans) :";
+    message += "\n   • Phase 1 (2026-2027) :";
+    message += "\n     - Introduction luzerne sur 15ha";
+    message += "\n     - Réduction labour à 50% surface";
+    message += "\n     - Certification HVE niveau 2";
+    message += "\n   • Phase 2 (2027-2028) :";
+    message += "\n     - Extension couverts à 80% surface";
+    message += "\n     - Développement vente directe viande";
+    message += "\n     - Installation haies 1er tronçon";
+    
+    message += "\n\n3. Long terme (4-5 ans) :";
+    message += "\n   • Phase 1 (2028-2029) :";
+    message += "\n     - Couverture permanente 100% surface";
+    message += "\n     - Certification HVE niveau 3";
+    message += "\n     - Autonomie en azote à 60%";
+    message += "\n   • Phase 2 (2029-2030) :";
+    message += "\n     - Système régénératif complet";
+    message += "\n     - Label bas carbone";
+    message += "\n     - Réseau de haies complet";
+
+    message += "\n\nBudget prévisionnel :";
+    message += "\n• Investissements initiaux : 15-20k€";
+    message += "\n• Retour sur investissement : 3-4 ans";
+    message += "\n• Aides mobilisables : 30-40% investissement";
+
+    message += "\n\nSouhaitez-vous des précisions sur :";
+    message += "\n1. Le choix des couverts végétaux ?";
+    message += "\n2. Les techniques de compostage ?";
+    message += "\n3. Les certifications et labels ?";
+    message += "\n4. Le plan financier détaillé ?";
+    
+    return message;
   };
 
   const handleCommuneClick = async (commune) => {
@@ -438,7 +599,6 @@ const ChatInterface = ({ farmData, setFarmData }) => {
     console.log('🚀 Soumission du formulaire avec:', userInput);
     console.log('📍 Étape actuelle:', currentStep);
 
-    // Ajout du message utilisateur
     setMessages(prev => [...prev, {
       type: 'user',
       content: userInput,
@@ -449,28 +609,50 @@ const ChatInterface = ({ farmData, setFarmData }) => {
     setInputError('');
 
     try {
-      console.log('🔄 Validation de l\'étape:', currentStep);
       let isValid = false;
       let validationData = null;
 
-      if (currentStep === 'location') {
-        isValid = await handleLocationSearch(userInput);
-        validationData = {
-          commune: contextData.commune,
-          climate: contextData.climate
+      if (currentStep === 'analysis') {
+        // Générer directement l'analyse finale
+        const analysisMessage = {
+          type: 'bot',
+          content: generateAnalysis(contextData),
+          step: 'analysis'
         };
-      } else {
-        isValid = questionFlow[currentStep]?.validate(userInput) ?? false;
-        validationData = { userInput };
+        setMessages(prev => [...prev, analysisMessage]);
+        return;
+      }
+
+      // Pour les autres étapes, continuer normalement
+      switch (currentStep) {
+        case 'location':
+          isValid = await handleLocationSearch(userInput);
+          validationData = {
+            commune: contextData.commune,
+            climate: contextData.climate
+          };
+          break;
+        case 'soil_challenges':
+          isValid = questionFlow[currentStep]?.validate(userInput);
+          const challenges = userInput.toLowerCase().split(/[,\s]+/);
+          setContextData(prev => ({
+            ...prev,
+            soil_challenges: challenges
+          }));
+          validationData = { soil_challenges: challenges };
+          break;
+        default:
+          isValid = questionFlow[currentStep]?.validate(userInput);
+          validationData = { userInput };
       }
 
       console.log('✨ Résultat de la validation:', isValid);
       console.log('📝 Données de validation:', validationData);
+      console.log('🌍 Context Data:', contextData);
 
       if (isValid) {
         console.log('✅ Validation réussie');
         
-        // Ajouter le message de succès
         const successMessage = questionFlow[currentStep]?.successMsg(validationData);
         if (successMessage) {
           setMessages(prev => [...prev, {
@@ -480,12 +662,12 @@ const ChatInterface = ({ farmData, setFarmData }) => {
           }]);
         }
 
-        // Passer à l'étape suivante
         const nextStep = questionFlow[currentStep]?.next;
         if (nextStep) {
           console.log('➡️ Passage à l\'étape:', nextStep);
           setCurrentStep(nextStep);
           localStorage.setItem('currentStep', nextStep);
+          localStorage.setItem('contextData', JSON.stringify(contextData));
         }
       } else {
         console.log('❌ Validation échouée');
@@ -499,6 +681,15 @@ const ChatInterface = ({ farmData, setFarmData }) => {
       setIsValidating(false);
       setUserInput('');
     }
+  };
+
+  const handleAnalysis = () => {
+    const analysisMessage = {
+      type: 'bot',
+      content: generateAnalysis(contextData),
+      step: 'analysis'
+    };
+    setMessages(prev => [...prev, analysisMessage]);
   };
 
   const formatMessageContent = (content, type) => {
