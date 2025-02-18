@@ -1,857 +1,1209 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { StepIndicator } from './StepIndicator';
+import { ProgressBar } from './ProgressBar';
 
-// Définition des étapes
+// Définition des étapes avec leurs transitions
 const STEPS = {
-  location: { label: 'Localisation', index: 0 },
-  climate_details: { label: 'Climat', index: 1 },
-  soil_description: { label: 'Sol', index: 2 },
-  soil_challenges: { label: 'Défis', index: 3 },
-  current_system: { label: 'Système actuel', index: 4 },
-  practices: { label: 'Pratiques', index: 5 },
-  economic_context: { label: 'Économie', index: 6 },
-  goals: { label: 'Objectifs', index: 7 },
-  analysis: { label: 'Analyse', index: 8 }
+  location: { 
+    index: 0, 
+    next: 'climate_details', 
+    label: 'Localisation',
+    description: 'Sélection de la commune'
+  },
+  climate_details: { 
+    index: 1, 
+    next: 'soil_details', 
+    label: 'Climat',
+    description: 'Analyse du climat local'
+  },
+  soil_details: { 
+    index: 2, 
+    next: 'practices', 
+    label: 'Sol',
+    description: 'Analyse des caractéristiques du sol'
+  },
+  practices: { 
+    index: 3, 
+    next: 'summary', 
+    label: 'Pratiques',
+    description: 'Description des pratiques agricoles'
+  },
+  summary: { 
+    index: 4, 
+    next: null, 
+    label: 'Synthèse',
+    description: 'Synthèse globale et recommandations'
+  }
 };
 
 const ChatInterface = ({ farmData, setFarmData }) => {
-  // Réinitialiser le localStorage au montage
-  useEffect(() => {
-    console.log('🚀 ChatInterface monté');
-    localStorage.setItem('currentStep', 'location');
-    return () => {
-      console.log('👋 ChatInterface démonté');
-    };
-  }, []);
-
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      content: "Bonjour ! Je suis votre conseiller en agriculture régénératrice. Je vais vous accompagner dans votre transition vers des pratiques agricoles durables et économiquement viables. Pour commencer, pouvez-vous me dire où se situe votre exploitation ?",
+      content: `👋 Bonjour ! Je suis votre conseiller en agriculture régénératrice.
+
+Je vais vous accompagner dans l'analyse de votre exploitation et vous proposer des recommandations adaptées pour une transition vers des pratiques agricoles durables et économiquement viables.
+
+🌍 Pour commencer, pouvez-vous me dire dans quelle commune se situe votre exploitation ?`,
       step: 'location'
     }
   ]);
   const [userInput, setUserInput] = useState('');
   const [currentStep, setCurrentStep] = useState('location');
-  const [locationData, setLocationData] = useState(null);
-  const [isValidating, setIsValidating] = useState(false);
-  const [contextData, setContextData] = useState({
-    commune: null,
-    climate: null,
-    soil: null,
-    soil_challenges: [],
-    system: null,
-    practices: null,
-    economic: null,
-    goals: null
-  });
-  const [suggestions, setSuggestions] = useState([]);
-  const [inputError, setInputError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [contextData, setContextData] = useState({});
   const messagesEndRef = useRef(null);
 
-  useEffect(() => {
-    const savedStep = localStorage.getItem('currentStep');
-    const savedContext = localStorage.getItem('contextData');
+  // Fonction pour mettre à jour le contexte avec les réponses de Deepseek
+  const updateContextWithDeepseek = (response) => {
+    console.log('📝 Mise à jour du contexte avec la réponse Deepseek:', response);
     
-    if (savedStep) {
-      setCurrentStep(savedStep);
-    }
-    
-    if (savedContext) {
-      try {
-        setContextData(JSON.parse(savedContext));
-      } catch (e) {
-        console.error('Erreur lors du chargement du contexte:', e);
-      }
-    }
-  }, []);
+    switch (response.type) {
+      case 'location':
+        setContextData(prev => {
+          const newContext = {
+            ...prev,
+            commune: {
+              ...response.data,
+              deepseek_analysis: true
+            }
+          };
+          console.log('🗺️ Nouveau contexte après mise à jour location:', newContext);
+          return newContext;
+        });
+        break;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      case 'climate':
+        setContextData(prev => {
+          const newContext = {
+            ...prev,
+            climate: {
+              ...response.data,
+              deepseek_analysis: true
+            }
+          };
+          console.log('🌤️ Nouveau contexte après mise à jour climat:', newContext);
+          return newContext;
+        });
+        break;
+
+      case 'soil':
+        setContextData(prev => {
+          const newContext = {
+            ...prev,
+            soil: {
+              ...response.data,
+              deepseek_analysis: true
+            }
+          };
+          console.log('🌱 Nouveau contexte après mise à jour sol:', newContext);
+          return newContext;
+        });
+        break;
+
+      case 'practices':
+        setContextData(prev => {
+          const newContext = {
+            ...prev,
+            practices: {
+              ...response.data,
+              deepseek_analysis: true
+            }
+          };
+          console.log('🚜 Nouveau contexte après mise à jour pratiques:', newContext);
+          return newContext;
+        });
+        break;
+
+      case 'summary':
+        setContextData(prev => {
+          const newContext = {
+            ...prev,
+            summary: {
+              ...response.data,
+              deepseek_analysis: true
+            }
+          };
+          console.log('📋 Nouveau contexte après mise à jour synthèse:', newContext);
+          return newContext;
+        });
+        break;
+
+      default:
+        console.error('❌ Type de réponse Deepseek inconnu:', response.type);
+    }
   };
 
+  // Effet pour suivre les changements du contexte
   useEffect(() => {
-    console.log('🚀 ChatInterface monté');
+    console.log('🔄 Contexte mis à jour:', contextData);
+  }, [contextData]);
+
+  // Effet pour le défilement automatique
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Effet pour le nettoyage
+  useEffect(() => {
+    console.log('👋 ChatInterface monté');
     return () => {
       console.log('👋 ChatInterface démonté');
     };
   }, []);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  // Exemples de grandes villes françaises pour les suggestions
-  const commonCities = [
-    'Paris', 'Lyon', 'Marseille', 'Toulouse', 'Bordeaux',
-    'Lille', 'Nantes', 'Strasbourg', 'Rennes', 'Montpellier'
-  ];
-
-  const handleLocationSearch = async (input) => {
-    console.log('🔍 Recherche de la commune:', input);
-    try {
-      // Coordonnées hardcodées pour les communes courantes
-      const commonCities = {
-        'brou': { nom: 'Brou', coordinates: [1.1667, 48.2167] },
-        'paris': { nom: 'Paris', coordinates: [2.3522, 48.8566] },
-        'lyon': { nom: 'Lyon', coordinates: [4.8357, 45.7640] },
-        'marseille': { nom: 'Marseille', coordinates: [5.3698, 43.2965] }
-      };
-
-      const searchInput = input.toLowerCase().trim();
-      let communeData;
-
-      if (commonCities[searchInput]) {
-        communeData = commonCities[searchInput];
-      } else {
-        // Appel à l'API geo.api.gouv.fr
-        const response = await fetch(`https://geo.api.gouv.fr/communes?nom=${searchInput}&boost=population&limit=1`);
-        if (!response.ok) throw new Error('Erreur lors de la requête API');
-        
-        const data = await response.json();
-        if (data.length === 0) throw new Error('Commune non trouvée');
-        
-        communeData = {
-          nom: data[0].nom,
-          coordinates: [data[0].centre.coordinates[0], data[0].centre.coordinates[1]]
-        };
-      }
-
-      // Mise à jour du contexte avec les informations de la commune
-      setContextData(prev => ({
-        ...prev,
-        commune: communeData
-      }));
-
-      return true;
-    } catch (error) {
-      console.error(' ❌ Erreur lors de la recherche:', error);
-      setInputError("Commune non trouvée. Veuillez réessayer.");
-      return false;
-    }
-  };
-
-  const getWeatherDescription = (code) => {
-    const descriptions = {
-      0: "Ciel dégagé",
-      1: "Principalement dégagé",
-      2: "Partiellement nuageux",
-      3: "Couvert",
-      45: "Brouillard",
-      48: "Brouillard givrant",
-      51: "Bruine légère",
-      53: "Bruine modérée",
-      55: "Bruine dense",
-      61: "Pluie légère",
-      63: "Pluie modérée",
-      65: "Pluie forte",
-      71: "Neige légère",
-      73: "Neige modérée",
-      75: "Neige forte",
-      77: "Grains de neige",
-      80: "Averses légères",
-      81: "Averses modérées",
-      82: "Averses violentes",
-      85: "Averses de neige légères",
-      86: "Averses de neige fortes",
-      95: "Orage",
-      96: "Orage avec grêle légère",
-      99: "Orage avec grêle forte"
-    };
-    return descriptions[code] || "Conditions inconnues";
-  };
-
-  const analyzeContext = (data) => {
-    const context = { ...contextData };
-    
-    if (data.climate) {
-      if (data.climate.temperature < 5) {
-        context.climate_risk = 'cold';
-      } else if (data.climate.temperature > 30) {
-        context.climate_risk = 'heat';
-      }
-      
-      if (data.climate.humidity > 80) {
-        context.humidity_risk = 'high';
-      } else if (data.climate.humidity < 30) {
-        context.humidity_risk = 'low';
-      }
-    }
-    
-    setContextData(context);
-  };
-
-  const getContextualQuestions = (step, context) => {
-    const questions = {
-      climate_details: {
-        cold: "Je vois qu'il fait actuellement assez froid. Est-ce représentatif de votre climat ? Quelles sont les variations saisonnières habituelles ?",
-        heat: "Je note qu'il fait actuellement chaud. Est-ce une situation habituelle ? Comment gérez-vous les périodes de chaleur ?",
-        default: "Pouvez-vous me décrire plus en détail votre climat local ? Je suis particulièrement intéressé par :"
-      },
-      soil_challenges: {
-        high: "Avec cette humidité élevée, rencontrez-vous des problèmes de drainage ?",
-        low: "Avec cette faible humidité, comment gérez-vous l'irrigation ?",
-        default: "Quels sont les principaux défis que vous rencontrez avec vos sols ?"
-      }
-    };
-
-    return questions[step]?.[context] || questions[step]?.default;
-  };
-
-  const getSoilData = async (coordinates) => {
-    try {
-      const [lon, lat] = coordinates;
-      const geoserviceUrl = `https://wxs.ign.fr/environnement/geoportail/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=inrae:cartepedon&outputFormat=json&bbox=${lon-0.1},${lat-0.1},${lon+0.1},${lat+0.1}`;
-      
-      const response = await fetch(geoserviceUrl);
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      if (data.features && data.features.length > 0) {
-        const soil = data.features[0].properties;
-        return {
-          texture: soil.texture_dominante,
-          profondeur: soil.profondeur_utile,
-          ph: soil.ph_eau,
-          matiere_organique: soil.taux_mo
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Erreur lors de la récupération des données de sol:', error);
-      return null;
-    }
-  };
-
-  const questionFlow = {
-    location: {
-      validate: async (input) => {
-        const isValid = await handleLocationSearch(input);
-        return isValid;
-      },
-      successMsg: (data) => {
-        console.log('🏡 Données pour le message de succès:', data);
-        if (!data?.commune?.nom) return null;
-
-        let message = `📍 Parfait ! Votre exploitation est située à ${data.commune.nom}`;
-        if (data.commune.codeDepartement) {
-          message += ` (${data.commune.codeDepartement})`;
-        }
-        message += ".\n\n";
-
-        if (data.climate?.current) {
-          const weather = data.climate.current;
-          message += "🌤️ Conditions météorologiques actuelles :\n";
-          message += `• Température : ${weather.temperature_2m.toFixed(1)}°C\n`;
-          message += `• Humidité : ${weather.relative_humidity_2m}%\n`;
-          message += `• Conditions : ${getWeatherDescription(weather.weather_code)}\n\n`;
-        }
-
-        message += "Pour mieux vous conseiller, j'ai besoin d'en savoir plus sur votre climat local.\n\n";
-        message += "Pouvez-vous me décrire :\n";
-        message += "• Les précipitations moyennes annuelles\n";
-        message += "• Les périodes de gel habituelles\n";
-        message += "• Les événements climatiques marquants (sécheresses, orages violents, etc.)\n";
-        message += "• Les variations saisonnières importantes";
-
-        return message;
-      },
-      errorMsg: () => "Je ne trouve pas cette commune. Pouvez-vous vérifier l'orthographe ou essayer une commune proche ?",
-      next: 'climate_details'
-    },
-    climate_details: {
-      validate: (input) => {
-        // Vérifie que la réponse est suffisamment détaillée
-        const minWords = 10;
-        const words = input.trim().split(/\s+/).length;
-        console.log(`📝 Nombre de mots: ${words}`);
-        return words >= minWords;
-      },
-      successMsg: () => {
-        const climate = contextData.climate;
-        let message = "Merci pour ces informations précieuses sur votre climat local.\n\n";
-        
-        if (climate) {
-          if (climate.current.temperature_2m < 5) {
-            message += "⚠️ Avec les températures actuellement basses, il est important de :\n";
-            message += "• Protéger les cultures sensibles au gel\n";
-            message += "• Surveiller l'état du sol et son humidité\n";
-            message += "• Planifier les semis en conséquence\n\n";
-          } else if (climate.current.temperature_2m > 25) {
-            message += "⚠️ Avec les températures actuellement élevées, pensez à :\n";
-            message += "• Gérer l'irrigation avec attention\n";
-            message += "• Protéger les cultures sensibles\n";
-            message += "• Maintenir une bonne couverture du sol\n\n";
-          }
-
-          if (climate.current.relative_humidity_2m > 85) {
-            message += "💧 L'humidité étant élevée, surveillez :\n";
-            message += "• Les risques de maladies fongiques\n";
-            message += "• La ventilation des cultures sous abri\n";
-            message += "• Le développement des adventices\n\n";
-          } else if (climate.current.relative_humidity_2m < 40) {
-            message += "💧 L'humidité étant faible, veillez à :\n";
-            message += "• Optimiser l'irrigation\n";
-            message += "• Protéger le sol de l'évaporation\n";
-            message += "• Choisir des variétés adaptées\n\n";
-          }
-        }
-
-        message += "Maintenant, parlons de votre sol. Pouvez-vous me décrire :\n";
-        message += "• Sa texture (argileux, limoneux, sableux...)\n";
-        message += "• Sa profondeur approximative\n";
-        message += "• Sa richesse en matière organique\n";
-        message += "• Sa capacité de drainage";
-
-        return message;
-      },
-      errorMsg: () => "Pourriez-vous donner plus de détails sur votre climat local ? Par exemple, parlez-moi des précipitations, des périodes de gel, ou des événements climatiques marquants.",
-      next: 'soil_description'
-    },
-    soil_description: {
-      next: 'soil_challenges',
-      validate: (input) => input.length >= 30,
-      errorMsg: () => "Pour vous conseiller au mieux, j'ai besoin d'en savoir plus sur vos sols. 🌱",
-      successMsg: () => {
-        let message = "Je comprends mieux la nature de vos sols. ";
-        
-        if (contextData.soil) {
-          message += "\n\n📊 Selon les données INRAE pour votre zone :\n";
-          if (contextData.soil.texture) message += `• Texture dominante : ${contextData.soil.texture}\n`;
-          if (contextData.soil.profondeur) message += `• Profondeur utile : ${contextData.soil.profondeur} cm\n`;
-          if (contextData.soil.ph) message += `• pH : ${contextData.soil.ph}\n`;
-          if (contextData.soil.matiere_organique) message += `• Taux de matière organique : ${contextData.soil.matiere_organique}%\n`;
-        }
-
-        message += "\n\nQuels sont les principaux défis que vous rencontrez avec vos sols ?\n";
-        message += "• Érosion\n";
-        message += "• Compaction\n";
-        message += "• Fertilité\n";
-        message += "• Drainage";
-        
-        return message;
-      }
-    },
-    soil_challenges: {
-      next: 'current_system',
-      validate: (input) => {
-        const challenges = ['erosion', 'fertilite', 'compaction', 'drainage', 'acidite', 'salinite'];
-        const userChallenges = input.toLowerCase().split(/[,\s]+/);
-        return userChallenges.some(challenge => challenges.includes(challenge));
-      },
-      errorMsg: () => "Pourriez-vous préciser les défis spécifiques que vous rencontrez avec vos sols ? Par exemple : érosion, fertilité, compaction, drainage, acidité, etc.",
-      successMsg: () => {
-        let message = "Je note ces défis concernant vos sols. Parlons maintenant de votre système de production actuel.\n\n";
-        message += "Pouvez-vous me décrire :\n";
-        message += "• Vos principales cultures\n";
-        message += "• Votre rotation actuelle\n";
-        message += "• Votre cheptel si vous en avez\n";
-        message += "• Vos équipements principaux";
-        return message;
-      }
-    },
-    current_system: {
-      next: 'practices',
-      validate: (input) => input.length > 15,
-      errorMsg: "Pourriez-vous donner plus de détails sur votre système de production ?",
-      successMsg: () => "Et concernant vos pratiques culturales actuelles :\n1. Comment travaillez-vous le sol ?\n2. Utilisez-vous des couverts végétaux ?\n3. Quels types d'intrants utilisez-vous ?"
-    },
-    practices: {
-      next: 'economic_context',
-      validate: (input) => input.length > 15,
-      errorMsg: "Ces informations sont importantes pour vous conseiller. Pourriez-vous préciser vos pratiques ?",
-      successMsg: () => "Parlons maintenant de l'aspect économique. Pouvez-vous me dire :\n1. Vos principaux postes de dépenses\n2. Les aides que vous recevez actuellement\n3. Vos contraintes financières principales"
-    },
-    economic_context: {
-      next: 'goals',
-      validate: (input) => input.length > 15,
-      errorMsg: "Le contexte économique est important pour la transition. Pourriez-vous donner plus de détails ?",
-      successMsg: () => "J'ai une bonne vue d'ensemble de votre situation. Pour finaliser, quels sont vos principaux objectifs pour la transition vers l'agriculture régénératrice ? Que souhaitez-vous améliorer en priorité ?"
-    },
-    goals: {
-      next: 'analysis',
-      validate: (input) => input.length > 15,
-      errorMsg: "Pourriez-vous préciser vos objectifs ?",
-      successMsg: () => {
-        let message = "Merci pour toutes ces informations ! Je vais maintenant analyser votre situation et vous proposer une stratégie de transition adaptée à votre contexte.";
-        message += "\n\nVoici une synthèse personnalisée pour votre exploitation :";
-        
-        // Analyse du sol et recommandations
-        if (contextData.soil_challenges) {
-          if (contextData.soil_challenges.includes('erosion')) {
-            message += "\n\n🌱 Pour lutter contre l'érosion :";
-            message += "\n• Implanter des couverts végétaux permanents";
-            message += "\n• Réduire le travail du sol";
-            message += "\n• Mettre en place des haies sur les zones sensibles";
-          }
-          
-          if (contextData.soil_challenges.includes('fertilite')) {
-            message += "\n\n🌿 Pour améliorer la fertilité :";
-            message += "\n1. Rotation des cultures :";
-            message += "\n   • Introduire des légumineuses (luzerne, trèfle)";
-            message += "\n   • Diversifier les familles de plantes";
-            message += "\n   • Alterner cultures d'hiver et de printemps";
-            message += "\n\n2. Gestion de la matière organique :";
-            message += "\n   • Optimiser l'utilisation du fumier bovin";
-            message += "\n   • Broyer et incorporer les résidus de culture";
-            message += "\n   • Composter les effluents d'élevage";
-          }
-        }
-
-        // Recommandations économiques
-        message += "\n\n💰 Optimisation économique :";
-        message += "\n1. Réduction des charges :";
-        message += "\n   • Diminution progressive des intrants chimiques";
-        message += "\n   • Optimisation de la fertilisation organique";
-        message += "\n   • Mutualisation possible du matériel";
-        message += "\n\n2. Valorisation :";
-        message += "\n   • Certification environnementale";
-        message += "\n   • Diversification des débouchés";
-        message += "\n   • Transformation à la ferme";
-
-        // Plan d'action
-        message += "\n\n📋 Plan d'action sur 5 ans :";
-        message += "\n\n1. Court terme (6-12 mois) :";
-        message += "\n   • Implanter des couverts végétaux sur 20% de la surface";
-        message += "\n   • Analyser la qualité du fumier";
-        message += "\n   • Former l'équipe aux techniques de conservation des sols";
-        
-        message += "\n\n2. Moyen terme (2-3 ans) :";
-        message += "\n   • Introduire une légumineuse dans la rotation";
-        message += "\n   • Réduire de 30% les intrants chimiques";
-        message += "\n   • Développer le compostage des effluents";
-        
-        message += "\n\n3. Long terme (4-5 ans) :";
-        message += "\n   • Atteindre 80% de couverture permanente des sols";
-        message += "\n   • Réduire de 50% les intrants chimiques";
-        message += "\n   • Certification environnementale";
-
-        message += "\n\nSouhaitez-vous des précisions sur un aspect particulier de ces recommandations ?";
-        
-        return message;
-      }
-    },
-    analysis: {
-      next: null,
-      validate: () => true,
-      successMsg: () => {
-        return generateAnalysis(contextData);
-      }
-    },
-  };
-
-  const generateAnalysis = (context) => {
-    console.log('Génération de l\'analyse avec le contexte:', context);
-    let message = "📊 Voici votre analyse personnalisée :\n\n";
-    
-    // Synthèse des défis
-    message += "🎯 Vos principaux défis :";
-    if (context.soil_challenges?.includes('erosion')) {
-      message += "\n• Lutte contre l'érosion des sols sur terres argilo-limoneuses";
-      message += "\n• Gestion des périodes de fortes pluies et ruissellement";
-    }
-    if (context.soil_challenges?.includes('fertilite')) {
-      message += "\n• Amélioration de la fertilité naturelle (actuellement 2% de MO)";
-      message += "\n• Optimisation de la valorisation du fumier bovin";
-    }
-    message += "\n• Réduction des charges opérationnelles (intrants, carburant)";
-    message += "\n• Gestion de la trésorerie pendant la transition";
-
-    // Recommandations pour l'érosion
-    if (context.soil_challenges?.includes('erosion')) {
-      message += "\n\n🌱 Plan anti-érosion détaillé :";
-      message += "\n1. Couverts végétaux adaptés à votre contexte :";
-      message += "\n   • Mélange avoine (50kg/ha) + vesce (25kg/ha) + phacélie (8kg/ha)";
-      message += "\n   • Seigle (80kg/ha) + féverole (100kg/ha) pour couverture hivernale";
-      message += "\n   • Sarrasin (40kg/ha) + trèfle incarnat (15kg/ha) en interculture courte";
-      
-      message += "\n\n2. Techniques de semis et implantation :";
-      message += "\n   • Semis à la volée avant récolte dans céréales (août)";
-      message += "\n   • Semis direct après moisson avec semoir Horsch Pronto ou équivalent";
-      message += "\n   • Roulage systématique pour favoriser le contact sol/graine";
-
-      message += "\n\n3. Aménagements anti-érosifs :";
-      message += "\n   • Création de bandes enherbées de 6m en rupture de pente";
-      message += "\n   • Implantation de haies tous les 100-150m perpendiculaires à la pente";
-      message += "\n   • Installation de fascines en zones sensibles";
-    }
-
-    // Recommandations pour la fertilité
-    if (context.soil_challenges?.includes('fertilite')) {
-      message += "\n\n🌿 Programme d'amélioration de la fertilité :";
-      message += "\n1. Nouvelle rotation sur 5 ans :";
-      message += "\n   • Année 1 : Colza associé à féverole + lentille";
-      message += "\n   • Année 2 : Blé + couvert hivernal";
-      message += "\n   • Année 3 : Luzerne ou trèfle (18 mois)";
-      message += "\n   • Année 4 : Maïs + couvert hivernal";
-      message += "\n   • Année 5 : Orge + couvert estival";
-
-      message += "\n\n2. Optimisation du fumier (50 bovins) :";
-      message += "\n   • Compostage en andains avec retournement (3 mois)";
-      message += "\n   • Épandage de 15t/ha sur cultures exigeantes";
-      message += "\n   • Analyses régulières NPK et oligo-éléments";
-      
-      message += "\n\n3. Biostimulation du sol :";
-      message += "\n   • Semis de cultures intermédiaires multiservices (CIMS)";
-      message += "\n   • Application de thé de compost oxygéné";
-      message += "\n   • Introduction de micro-organismes bénéfiques";
-    }
-
-    // Plan économique détaillé
-    message += "\n\n💰 Stratégie économique détaillée :";
-    message += "\n1. Réduction des charges (objectif -30% en 3 ans) :";
-    message += "\n   • Diminution progressive des intrants :";
-    message += "\n     - Année 1 : -15% (optimisation des doses)";
-    message += "\n     - Année 2 : -25% (substitution partielle)";
-    message += "\n     - Année 3 : -30% (système régénératif)";
-    message += "\n   • Carburant : -25% grâce au non-labour";
-    message += "\n   • Mutualisation du matériel via CUMA locale";
-
-    message += "\n\n2. Nouvelles sources de revenus :";
-    message += "\n   • Certification HVE niveau 3 (+15-20€/t sur céréales)";
-    message += "\n   • Développement circuit court viande bovine";
-    message += "\n   • Production de semences de couverts";
-    message += "\n   • Prestation de compostage";
-
-    // Plan d'action détaillé
-    message += "\n\n📋 Plan d'action détaillé sur 5 ans :";
-    
-    message += "\n\n1. Court terme (6-12 mois) :";
-    message += "\n   • Phase 1 (Automne 2025) :";
-    message += "\n     - Implanter couverts sur 20ha (avoine-vesce)";
-    message += "\n     - Installer plateforme de compostage";
-    message += "\n     - Formation sur agriculture régénératrice";
-    message += "\n   • Phase 2 (Printemps 2026) :";
-    message += "\n     - Premiers essais de semis direct sur 5ha";
-    message += "\n     - Analyse complète des sols et du fumier";
-    message += "\n     - Certification HVE niveau 1";
-    
-    message += "\n\n2. Moyen terme (2-3 ans) :";
-    message += "\n   • Phase 1 (2026-2027) :";
-    message += "\n     - Introduction luzerne sur 15ha";
-    message += "\n     - Réduction labour à 50% surface";
-    message += "\n     - Certification HVE niveau 2";
-    message += "\n   • Phase 2 (2027-2028) :";
-    message += "\n     - Extension couverts à 80% surface";
-    message += "\n     - Développement vente directe viande";
-    message += "\n     - Installation haies 1er tronçon";
-    
-    message += "\n\n3. Long terme (4-5 ans) :";
-    message += "\n   • Phase 1 (2028-2029) :";
-    message += "\n     - Couverture permanente 100% surface";
-    message += "\n     - Certification HVE niveau 3";
-    message += "\n     - Autonomie en azote à 60%";
-    message += "\n   • Phase 2 (2029-2030) :";
-    message += "\n     - Système régénératif complet";
-    message += "\n     - Label bas carbone";
-    message += "\n     - Réseau de haies complet";
-
-    message += "\n\nBudget prévisionnel :";
-    message += "\n• Investissements initiaux : 15-20k€";
-    message += "\n• Retour sur investissement : 3-4 ans";
-    message += "\n• Aides mobilisables : 30-40% investissement";
-
-    message += "\n\nSouhaitez-vous des précisions sur :";
-    message += "\n1. Le choix des couverts végétaux ?";
-    message += "\n2. Les techniques de compostage ?";
-    message += "\n3. Les certifications et labels ?";
-    message += "\n4. Le plan financier détaillé ?";
-    
-    return message;
-  };
-
-  const handleCommuneClick = async (commune) => {
-    // Mettre à jour l'entrée utilisateur
-    setUserInput(commune);
-    
-    // Ajouter le message de l'utilisateur
-    setMessages(prev => [...prev, {
-      type: 'user',
-      content: commune,
-      step: currentStep
-    }]);
-
-    // Valider directement la commune
-    const validationResult = await validateLocation(commune);
-    if (validationResult) {
-      // Mettre à jour les données
-      setFarmData(prev => ({
-        ...prev,
-        location: validationResult
-      }));
-
-      // Ajouter le message de succès du bot
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        content: questionFlow[currentStep].successMsg(validationResult),
-        step: questionFlow[currentStep].next
-      }]);
-
-      // Passer à l'étape suivante
-      setCurrentStep(questionFlow[currentStep].next);
-    }
-
-    // Réinitialiser l'entrée
-    setUserInput('');
+  const handleUserInput = (e) => {
+    setUserInput(e.target.value);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!userInput.trim() || isValidating) return;
+    if (!userInput.trim() || isLoading) return;
 
-    console.log('🚀 Soumission du formulaire avec:', userInput);
-    console.log('📍 Étape actuelle:', currentStep);
-
+    // Ajouter le message de l'utilisateur
     setMessages(prev => [...prev, {
       type: 'user',
       content: userInput,
       step: currentStep
     }]);
 
-    setIsValidating(true);
-    setInputError('');
+    setIsLoading(true);
+    setError(null);
 
     try {
-      let isValid = false;
-      let validationData = null;
-
-      if (currentStep === 'analysis') {
-        // Générer directement l'analyse finale
-        const analysisMessage = {
-          type: 'bot',
-          content: generateAnalysis(contextData),
-          step: 'analysis'
-        };
-        setMessages(prev => [...prev, analysisMessage]);
-        return;
-      }
-
-      // Pour les autres étapes, continuer normalement
+      // Traitement spécifique selon l'étape
       switch (currentStep) {
         case 'location':
-          isValid = await handleLocationSearch(userInput);
-          validationData = {
-            commune: contextData.commune,
-            climate: contextData.climate
-          };
+          await handleLocationStep(userInput);
           break;
-        case 'soil_challenges':
-          isValid = questionFlow[currentStep]?.validate(userInput);
-          const challenges = userInput.toLowerCase().split(/[,\s]+/);
-          setContextData(prev => ({
-            ...prev,
-            soil_challenges: challenges
-          }));
-          validationData = { soil_challenges: challenges };
+        case 'climate_details':
+          await handleClimateStep(userInput);
+          break;
+        case 'soil_details':
+          await handleSoilStep(userInput);
+          break;
+        case 'practices':
+          await handlePracticesStep(userInput);
+          break;
+        case 'summary':
+          handleSummaryStep();
           break;
         default:
-          isValid = questionFlow[currentStep]?.validate(userInput);
-          validationData = { userInput };
-      }
-
-      console.log('✨ Résultat de la validation:', isValid);
-      console.log('📝 Données de validation:', validationData);
-      console.log('🌍 Context Data:', contextData);
-
-      if (isValid) {
-        console.log('✅ Validation réussie');
-        
-        const successMessage = questionFlow[currentStep]?.successMsg(validationData);
-        if (successMessage) {
-          setMessages(prev => [...prev, {
-            type: 'bot',
-            content: successMessage,
-            step: currentStep
-          }]);
-        }
-
-        const nextStep = questionFlow[currentStep]?.next;
-        if (nextStep) {
-          console.log('➡️ Passage à l\'étape:', nextStep);
-          setCurrentStep(nextStep);
-          localStorage.setItem('currentStep', nextStep);
-          localStorage.setItem('contextData', JSON.stringify(contextData));
-        }
-      } else {
-        console.log('❌ Validation échouée');
-        const errorMessage = questionFlow[currentStep]?.errorMsg?.() ?? "Une erreur s'est produite lors de la validation.";
-        setInputError(errorMessage);
+          console.log(`Étape ${currentStep} non gérée`);
       }
     } catch (error) {
-      console.error('❌ Erreur:', error);
-      setInputError("Une erreur est survenue. Veuillez réessayer.");
+      console.error('❌ Erreur lors du traitement:', error);
+      setError(error.message);
+      setMessages(prev => [...prev, {
+        type: 'error',
+        content: error.message,
+        step: currentStep
+      }]);
     } finally {
-      setIsValidating(false);
+      setIsLoading(false);
       setUserInput('');
     }
   };
 
-  const handleAnalysis = () => {
-    const analysisMessage = {
-      type: 'bot',
-      content: generateAnalysis(contextData),
-      step: 'analysis'
+  const handleLocationStep = async (input) => {
+    // Simulation de recherche de commune
+    const commune = {
+      nom: input,
+      departement: "Yvelines (78)",
+      region: "Île-de-France",
+      description: "Commune située dans la vallée de la Seine",
+      climat: "Climat océanique dégradé"
     };
-    setMessages(prev => [...prev, analysisMessage]);
-  };
 
-  const formatMessageContent = (content, type) => {
-    if (type === 'bot') {
-      return content.split('\n').map((line, index) => (
-        <div key={index} className={`${line.startsWith('•') ? 'ml-4' : ''} ${line.startsWith('⚠️') ? 'text-yellow-600' : ''} ${line.startsWith('💧') ? 'text-blue-600' : ''}`}>
-          {line}
-        </div>
-      ));
+    console.log('🏠 Analyse de la commune:', commune);
+
+    // Mise à jour du contexte avec les informations de la commune
+    updateContextWithDeepseek({
+      type: 'location',
+      data: commune
+    });
+
+    // Message de confirmation de la commune
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: `📍 Parfait ! Votre exploitation est située à ${commune.nom} (${commune.departement}).`,
+      step: 'location'
+    }]);
+
+    // Générer automatiquement l'analyse climatique
+    const climatePrompt = `Tu es un expert en climatologie et en agronomie. En te basant sur ta connaissance du climat de ${commune.nom} (${commune.region}), réponds aux questions suivantes :
+
+1️⃣ Les précipitations :
+   • Quelle est la pluviométrie moyenne annuelle ?
+   • Comment sont réparties les pluies sur l'année ?
+   • Y a-t-il des périodes de sécheresse ?
+   • Y a-t-il des risques d'inondation ?
+
+2️⃣ Les températures :
+   • Quelles sont les températures moyennes par saison ?
+   • Quand surviennent les premières et dernières gelées ?
+   • Combien de jours de gel compte-t-on par an ?
+   • Y a-t-il des vagues de chaleur en été ?
+
+3️⃣ Les événements climatiques marquants :
+   • Y a-t-il des épisodes de grêle ?
+   • Y a-t-il des orages violents ?
+   • Y a-t-il des vents dominants ?
+   • Quels changements climatiques ont été observés ces dernières années ?
+
+Fournis une réponse détaillée et structurée pour chaque point.`;
+
+    console.log('🌤️ Demande d\'analyse climatique...');
+    const climateResponse = await analyzeWithDeepseek("Analyse climatique pour " + commune.nom, climatePrompt);
+    console.log('🌤️ Réponse climatique reçue:', climateResponse);
+
+    if (climateResponse.type !== 'climate') {
+      console.error('❌ Type de réponse climatique invalide:', climateResponse.type);
+      throw new Error('Réponse climatique invalide');
     }
-    return content;
+
+    updateContextWithDeepseek(climateResponse);
+
+    // Afficher l'analyse climatique
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: formatClimateResponse(climateResponse.data),
+      step: 'climate_details'
+    }]);
+
+    // Générer automatiquement l'analyse du sol
+    const soilPrompt = `Tu es un expert en pédologie et en agronomie. En te basant sur ta connaissance des sols de ${commune.nom} (${commune.region}), fournis une analyse détaillée selon les points suivants :
+
+1️⃣ Caractéristiques physiques :
+   • Texture du sol (argileuse, limoneuse, sableuse...)
+   • Profondeur exploitable
+   • Capacité de rétention d'eau
+
+2️⃣ État du sol :
+   • Risques d'érosion
+   • Problèmes de compaction
+   • Activité biologique (vers de terre, etc.)
+
+3️⃣ Propriétés chimiques :
+   • pH et calcaire
+   • Taux de matière organique
+   • Éléments nutritifs et carences potentielles
+
+Fournis une analyse détaillée et des recommandations pratiques.`;
+
+    console.log('🌱 Demande d\'analyse pédologique...');
+    const soilResponse = await analyzeWithDeepseek("Analyse pédologique pour " + commune.nom, soilPrompt);
+    console.log('🌱 Réponse pédologique reçue:', soilResponse);
+
+    if (soilResponse.type !== 'soil') {
+      console.error('❌ Type de réponse pédologique invalide:', soilResponse.type);
+      throw new Error('Réponse pédologique invalide');
+    }
+
+    updateContextWithDeepseek(soilResponse);
+
+    // Afficher l'analyse du sol
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: formatSoilResponse(soilResponse.data),
+      step: 'soil_details'
+    }]);
+
+    // Message pour passer aux pratiques agricoles
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: `🚜 Parlons maintenant de vos pratiques agricoles actuelles. Pouvez-vous me décrire :
+
+1️⃣ Système de culture :
+   • Quelles sont vos cultures principales ?
+   • Comment organisez-vous vos rotations ?
+   • Quelles sont vos périodes de semis ?
+
+2️⃣ Travail du sol :
+   • Quel type de travail du sol pratiquez-vous ?
+   • Utilisez-vous des couverts végétaux ?
+   • Comment gérez-vous les résidus de culture ?
+
+3️⃣ Fertilisation et protection :
+   • Quelles sont vos pratiques de fertilisation ?
+   • Comment gérez-vous les adventices ?
+   • Quelles sont vos stratégies phytosanitaires ?
+
+Décrivez-moi vos pratiques le plus précisément possible.`,
+      step: 'soil_details'
+    }]);
+
+    setCurrentStep('practices');
   };
 
-  // Sauvegarde automatique des messages et de l'étape courante
-  useEffect(() => {
-    localStorage.setItem('chatMessages', JSON.stringify(messages));
-    localStorage.setItem('currentStep', currentStep);
-    localStorage.setItem('farmData', JSON.stringify(farmData));
-  }, [messages, currentStep, farmData]);
+  const handleClimateStep = async (input) => {
+    const systemPrompt = `Tu es un expert en climatologie et en agronomie. Ton rôle est d'analyser en détail les conditions climatiques décrites et leurs impacts sur l'agriculture.
 
-  // Fonction pour revenir à l'étape précédente
-  const goToPreviousStep = () => {
-    const currentIndex = STEPS[currentStep].index;
-    if (currentIndex > 0) {
-      const previousStep = Object.entries(STEPS).find(([_, step]) => step.index === currentIndex - 1);
-      if (previousStep) {
-        setCurrentStep(previousStep[0]);
+    Analyse et structure ta réponse selon les points suivants :
+    1. Précipitations :
+       - Répartition annuelle
+       - Périodes de sécheresse
+       - Risques d'inondation
+    
+    2. Températures :
+       - Moyennes saisonnières
+       - Périodes de gel
+       - Vagues de chaleur
+    
+    3. Événements extrêmes :
+       - Fréquence et intensité
+       - Impact sur les cultures
+    
+    4. Recommandations :
+       - Adaptations culturales suggérées
+       - Mesures de prévention
+       - Opportunités climatiques
+
+    Fournis une analyse détaillée et des recommandations pratiques.`;
+
+    const response = await analyzeWithDeepseek(input, systemPrompt);
+    
+    if (response.type !== 'climate') {
+      throw new Error('Réponse climatique invalide');
+    }
+
+    updateContextWithDeepseek(response);
+
+    // Formater la réponse de manière structurée
+    const formatClimateResponse = (data) => {
+      return `📊 Analyse climatique détaillée :
+
+🌧️ Précipitations
+• Pluviométrie annuelle : ${data.precipitations.annuelle}
+• Répartition : ${data.precipitations.repartition}
+• Périodes sèches : ${data.precipitations.periodes_seches}
+• Risque d'inondation : ${data.precipitations.risque_inondation}
+
+🌡️ Températures
+• Moyenne annuelle : ${data.temperatures.moyennes.annuelle}
+• Printemps : ${data.temperatures.moyennes.printemps}
+• Été : ${data.temperatures.moyennes.ete}
+• Automne : ${data.temperatures.moyennes.automne}
+• Hiver : ${data.temperatures.moyennes.hiver}
+
+❄️ Gel
+• Première gelée : ${data.temperatures.gel.premiere_gelee}
+• Dernière gelée : ${data.temperatures.gel.derniere_gelee}
+• Jours de gel : ${data.temperatures.gel.jours_gel}
+
+☀️ Chaleur
+• Jours chauds : ${data.temperatures.chaleur.jours_chauds}
+• Périodes : ${data.temperatures.chaleur.periodes}
+
+⚠️ Événements extrêmes
+• Orages : ${data.evenements_extremes.frequence.orages}
+• Grêle : ${data.evenements_extremes.frequence.grele}
+• Sécheresse : ${data.evenements_extremes.frequence.secheresse}
+
+🌾 Impact sur les cultures
+${data.evenements_extremes.impacts.cultures}
+${data.evenements_extremes.impacts.sol}
+
+📋 Recommandations
+
+Adaptations culturales :
+${data.recommandations.adaptations.map(item => '• ' + item).join('\n')}
+
+Mesures préventives :
+${data.recommandations.preventions.map(item => '• ' + item).join('\n')}
+
+Opportunités :
+${data.recommandations.opportunites.map(item => '• ' + item).join('\n')}`;
+    };
+
+    // Ajouter la réponse formatée aux messages
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: formatClimateResponse(response.data),
+      step: 'climate_details'
+    }]);
+
+    // Ajouter le message pour la prochaine étape
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: `🌱 Maintenant, parlons du sol de votre exploitation. Pouvez-vous me décrire :
+
+1️⃣ Caractéristiques physiques :
+   • Quelle est la texture du sol (argileuse, limoneuse, sableuse...) ?
+   • Quelle est la profondeur exploitable ?
+   • Comment est la rétention d'eau ?
+
+2️⃣ État du sol :
+   • Observez-vous des signes d'érosion ?
+   • Y a-t-il des problèmes de compaction ?
+   • Comment est l'activité biologique (vers de terre, etc.) ?
+
+3️⃣ Analyses disponibles :
+   • Avez-vous des analyses récentes du sol ?
+   • Connaissez-vous le pH et le taux de matière organique ?
+   • Avez-vous identifié des carences particulières ?
+
+Décrivez-moi ces aspects le plus précisément possible.`,
+      step: 'climate_details'
+    }]);
+
+    setCurrentStep('soil_details');
+  };
+
+  const handleSoilStep = async (input) => {
+    const systemPrompt = `Tu es un expert en pédologie et en agronomie. Ton rôle est d'analyser en détail les caractéristiques du sol et leurs implications pour l'agriculture.
+
+    Analyse et structure ta réponse selon les points suivants :
+    1. Caractéristiques physiques :
+       - Texture et structure
+       - Profondeur exploitable
+       - Capacité de rétention d'eau
+    
+    2. Propriétés chimiques :
+       - pH et calcaire
+       - Matière organique
+       - Éléments nutritifs
+    
+    3. État du sol :
+       - Signes de dégradation
+       - Activité biologique
+       - Problèmes structurels
+    
+    4. Recommandations :
+       - Améliorations suggérées
+       - Pratiques culturales adaptées
+       - Plan d'action prioritaire
+
+    Fournis une analyse détaillée et des recommandations pratiques pour améliorer la qualité du sol.`;
+
+    const response = await analyzeWithDeepseek(input, systemPrompt);
+    
+    if (response.type !== 'soil') {
+      throw new Error('Réponse pédologique invalide');
+    }
+
+    updateContextWithDeepseek(response);
+
+    // Ajouter un message pour introduire la prochaine étape
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: `Merci pour ces informations sur votre sol. Maintenant, parlons de vos pratiques agricoles actuelles. Pouvez-vous me décrire :
+• Vos rotations de cultures
+• Votre travail du sol
+• Vos pratiques de fertilisation
+• Votre gestion des adventices`,
+      step: 'soil_details'
+    }]);
+
+    setCurrentStep('practices');
+  };
+
+  const handlePracticesStep = async (input) => {
+    const systemPrompt = `Tu es un expert en agronomie. En te basant sur les pratiques agricoles décrites, fournis une analyse détaillée et des recommandations d'amélioration selon les points suivants :
+
+1️⃣ Système de culture :
+   • Analyse des rotations
+   • Périodes de semis
+   • Adéquation avec le contexte pédo-climatique
+
+2️⃣ Travail du sol :
+   • Pertinence des pratiques
+   • Impact sur la structure du sol
+   • Gestion des résidus et couverts
+
+3️⃣ Fertilisation et protection :
+   • Équilibre de la fertilisation
+   • Gestion des adventices
+   • Stratégie phytosanitaire
+
+Fournis une analyse détaillée et des recommandations pratiques pour optimiser le système.`;
+
+    const response = await analyzeWithDeepseek(input, systemPrompt);
+    
+    if (response.type !== 'practices') {
+      throw new Error('Réponse pratiques invalide');
+    }
+
+    updateContextWithDeepseek(response);
+
+    // Formater et afficher la réponse sur les pratiques
+    const formatPracticesResponse = (data) => {
+      return `🚜 Analyse des pratiques agricoles :
+
+📊 Système de culture
+• Rotations : ${data.systeme.rotations.evaluation}
+  - Points forts : ${data.systeme.rotations.points_forts}
+  - Points à améliorer : ${data.systeme.rotations.points_ameliorer}
+• Périodes de semis : ${data.systeme.semis.evaluation}
+  - Adaptation climat : ${data.systeme.semis.adaptation_climat}
+  - Risques identifiés : ${data.systeme.semis.risques}
+• Adéquation contexte : ${data.systeme.adequation.evaluation}
+  - Sol : ${data.systeme.adequation.sol}
+  - Climat : ${data.systeme.adequation.climat}
+
+🌱 Travail du sol
+• Pratiques actuelles : ${data.travail_sol.pratiques.evaluation}
+  - Impact structure : ${data.travail_sol.pratiques.impact_structure}
+  - Recommandations : ${data.travail_sol.pratiques.recommandations}
+• Couverts végétaux : ${data.travail_sol.couverts.evaluation}
+  - Bénéfices : ${data.travail_sol.couverts.benefices}
+  - Pistes amélioration : ${data.travail_sol.couverts.ameliorations}
+• Résidus : ${data.travail_sol.residus.evaluation}
+  - Gestion : ${data.travail_sol.residus.gestion}
+  - Suggestions : ${data.travail_sol.residus.suggestions}
+
+🌿 Fertilisation et protection
+• Fertilisation : ${data.fertilisation.evaluation}
+  - Équilibre : ${data.fertilisation.equilibre}
+  - Optimisation : ${data.fertilisation.optimisation}
+• Adventices : ${data.protection.adventices.evaluation}
+  - Stratégie : ${data.protection.adventices.strategie}
+  - Améliorations : ${data.protection.adventices.ameliorations}
+• Phytosanitaire : ${data.protection.phyto.evaluation}
+  - Approche : ${data.protection.phyto.approche}
+  - Alternatives : ${data.protection.phyto.alternatives}
+
+📋 Recommandations globales
+${data.recommandations.globales.map(item => '• ' + item).join('\n')}
+
+🎯 Actions prioritaires
+${data.recommandations.prioritaires.map(item => '• ' + item).join('\n')}
+
+💡 Opportunités d'amélioration
+${data.recommandations.opportunites.map(item => '• ' + item).join('\n')}`;
+    };
+
+    // Afficher l'analyse des pratiques
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: formatPracticesResponse(response.data),
+      step: 'practices'
+    }]);
+
+    // Message de transition vers le résumé
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: `📝 Merci pour toutes ces informations ! Je vais maintenant vous présenter une synthèse globale et des recommandations personnalisées pour votre exploitation.`,
+      step: 'practices'
+    }]);
+
+    // Passer à l'étape du résumé
+    setTimeout(() => {
+      setCurrentStep('summary');
+      handleSummaryStep();
+    }, 1000);
+  };
+
+  const handleSummaryStep = async () => {
+    const { commune, climate, soil, practices } = contextData;
+
+    if (!commune || !climate || !soil) {
+      console.error('❌ Données manquantes pour le résumé');
+      return;
+    }
+
+    // Analyser les objectifs de l'utilisateur à partir des pratiques
+    const userObjectives = practices ? [
+      practices.systeme.rotations.points_ameliorer,
+      practices.travail_sol.pratiques.recommandations,
+      practices.protection.phyto.alternatives
+    ].filter(Boolean) : [];
+
+    // Identifier les contraintes principales
+    const mainConstraints = [
+      climate.evenements_extremes.impacts.cultures,
+      soil.proprietes.physiques.compaction,
+      soil.proprietes.physiques.hydromorphie
+    ].filter(Boolean);
+
+    // Identifier les atouts existants
+    const existingStrengths = [
+      climate.recommandations.opportunites[0],
+      soil.potentiel.agricole.cultures_adaptees[0],
+      practices?.systeme.rotations.points_forts
+    ].filter(Boolean);
+
+    const summaryPrompt = `Tu es un expert en agriculture régénératrice. Ta mission est d'analyser la situation d'une exploitation agricole et de proposer un plan de transition détaillé vers des pratiques régénératives.
+
+Voici le contexte de l'exploitation :
+
+### 📊 Contexte
+• Localisation : ${commune.nom} (${commune.region})
+• Climat : ${commune.climat}
+  - Précipitations : ${climate.precipitations.annuelle}
+  - Températures : ${climate.temperatures.moyennes.annuelle}
+  - Risques : ${climate.evenements_extremes.frequence.secheresse}
+
+### 🌍 Sol
+• Texture : ${soil.caracteristiques.texture.classification}
+• Structure : ${soil.caracteristiques.structure.type}
+• Propriétés :
+  - pH : ${soil.proprietes.chimiques.ph}
+  - MO : ${soil.proprietes.chimiques.mo}
+  - CEC : ${soil.proprietes.chimiques.cec}
+
+### 💪 Atouts
+${existingStrengths.map(strength => `• ${strength}`).join('\n')}
+
+### ⚠️ Contraintes
+${mainConstraints.map(constraint => `• ${constraint}`).join('\n')}
+
+### 🚜 Pratiques actuelles
+${practices ? `• Système : ${practices.systeme.rotations.evaluation}
+• Sol : ${practices.travail_sol.pratiques.evaluation}
+• Protection : ${practices.protection.phyto.evaluation}` : '• Pratiques non renseignées'}
+
+En te basant sur ces informations, génère une synthèse structurée qui répond aux points suivants :
+
+1. Analyse de la situation actuelle
+   - Forces et faiblesses du système
+   - Opportunités et menaces
+   - Points d'amélioration prioritaires
+
+2. Proposition de 3 scénarios de transition
+   - Scénario 1 : Transition progressive (3-5 ans)
+   - Scénario 2 : Basculement rapide (2 ans)
+   - Scénario 3 : Excellence régénérative (5-10 ans)
+   Pour chaque scénario, détaille :
+   • Objectifs spécifiques
+   • Actions clés
+   • Investissements nécessaires
+   • Retour sur investissement
+   • Impact sur le sol et la biodiversité
+
+3. Plan d'action détaillé
+   - Phase 1 : Diagnostic (6-12 mois)
+   - Phase 2 : Mise en œuvre (2-5 ans)
+   - Phase 3 : Optimisation (5 ans+)
+
+4. Objectifs de performance mesurables
+   - Court terme (2 ans)
+   - Moyen terme (5 ans)
+   - Long terme (10 ans)
+
+5. Recommandation finale
+   - Scénario le plus adapté
+   - Justification du choix
+   - Conditions de réussite
+   - Évolutions possibles
+
+Utilise des emojis pour structurer la réponse et la rendre plus lisible. Sois précis dans les chiffres et les délais.`;
+
+    console.log('📋 Demande de synthèse personnalisée...');
+    try {
+      const summaryResponse = await analyzeWithDeepseek(summaryPrompt, "Génère une synthèse détaillée pour la transition vers l'agriculture régénératrice");
+      console.log('📋 Réponse de synthèse reçue:', summaryResponse);
+
+      // Formater la réponse en fonction de son type
+      let formattedContent = '';
+      if (typeof summaryResponse.data === 'string') {
+        formattedContent = summaryResponse.data;
+      } else if (typeof summaryResponse.data === 'object') {
+        formattedContent = JSON.stringify(summaryResponse.data, null, 2);
+      } else {
+        formattedContent = "❌ Erreur : Format de réponse non reconnu";
       }
+
+      // Afficher la synthèse formatée
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: formattedContent,
+        step: 'summary'
+      }]);
+
+      setCurrentStep('done');
+    } catch (error) {
+      console.error('❌ Erreur lors de la génération de la synthèse:', error);
+      throw error;
     }
   };
 
-  // Composant de la barre de progression
-  const ProgressBar = () => (
-    <div className="w-full bg-gray-100 rounded-full h-2.5 mb-4">
-      <div 
-        className="bg-green-600 h-2.5 rounded-full transition-all duration-500"
-        style={{ width: `${(STEPS[currentStep].index / (Object.keys(STEPS).length - 1)) * 100}%` }}
-      />
-    </div>
-  );
+  const analyzeWithDeepseek = async (userPrompt, systemPrompt) => {
+    console.log('🤖 Appel à Deepseek avec:', { userPrompt, systemPrompt });
 
-  // Composant des étapes
-  const StepIndicator = () => (
-    <div className="flex justify-between items-center mb-4 px-4 text-sm text-gray-600">
-      {Object.entries(STEPS).map(([key, step]) => (
-        <div 
-          key={key}
-          className={`flex flex-col items-center ${
-            step.index === STEPS[currentStep].index 
-              ? 'text-green-600 font-bold' 
-              : step.index < STEPS[currentStep].index 
-                ? 'text-green-400' 
-                : ''
-          }`}
-        >
-          <div className={`w-3 h-3 rounded-full mb-1 ${
-            step.index <= STEPS[currentStep].index 
-              ? 'bg-green-600' 
-              : 'bg-gray-300'
-          }`} />
-          <span className="hidden md:inline">{step.label}</span>
-        </div>
-      ))}
-    </div>
-  );
+    // Simulation de délai réseau
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-  useEffect(() => {
-    if (currentStep === 'climate_details') {
-      setSuggestions([
-        "Les précipitations sont d'environ 700mm par an, avec des périodes plus pluvieuses en automne.",
-        "Nous avons des gelées fréquentes de novembre à mars, parfois tardives en avril.",
-        "L'été est généralement sec avec des orages violents en juillet-août.",
-        "Le printemps est variable avec des alternances de douceur et de froid."
-      ]);
+    // Déterminer le type d'analyse basé sur le contenu du prompt
+    if (userPrompt.includes('climatique') || systemPrompt.includes('climatologie')) {
+      return {
+        type: 'climate',
+        data: {
+          precipitations: {
+            annuelle: '750-800 mm/an',
+            repartition: 'Bien répartie sur l\'année',
+            periodes_seches: 'Juillet-Août',
+            risque_inondation: 'Faible'
+          },
+          temperatures: {
+            moyennes: {
+              annuelle: '11.5°C',
+              printemps: '10-15°C',
+              ete: '20-25°C',
+              automne: '10-15°C',
+              hiver: '3-8°C'
+            },
+            gel: {
+              premiere_gelee: 'Fin octobre',
+              derniere_gelee: 'Début avril',
+              jours_gel: '45-50 jours'
+            },
+            chaleur: {
+              jours_chauds: '15-20 jours > 30°C',
+              periodes: 'Mi-juillet à mi-août'
+            }
+          },
+          evenements_extremes: {
+            frequence: {
+              orages: 'Modérée (10-15/an)',
+              grele: 'Faible (2-3/an)',
+              secheresse: 'Modérée'
+            },
+            impacts: {
+              cultures: 'Stress hydrique estival',
+              sol: 'Risque de battance au printemps'
+            }
+          },
+          recommandations: {
+            adaptations: [
+              'Choix de variétés résistantes à la sécheresse',
+              'Irrigation raisonnée',
+              'Protection contre le gel tardif'
+            ],
+            preventions: [
+              'Mise en place de haies brise-vent',
+              'Couverture permanente du sol',
+              'Systèmes d\'alerte météo'
+            ],
+            opportunites: [
+              'Potentiel pour cultures thermophiles',
+              'Conditions favorables aux légumineuses',
+              'Bon potentiel photosynthétique'
+            ]
+          }
+        }
+      };
+    } else if (userPrompt.includes('pédologique') || systemPrompt.includes('pédologie')) {
+      return {
+        type: 'soil',
+        data: {
+          caracteristiques: {
+            texture: {
+              classification: 'Limono-argileuse',
+              argile: '25-30%',
+              limon: '45-50%',
+              sable: '20-25%'
+            },
+            structure: {
+              type: 'Grumeleuse à polyédrique',
+              stabilite: 'Moyenne à bonne',
+              porosite: 'Satisfaisante'
+            },
+            profondeur: {
+              utile: '80-100 cm',
+              obstacles: 'Absence de semelle de labour',
+              reserve_eau: '150-180 mm'
+            }
+          },
+          proprietes: {
+            chimiques: {
+              ph: '6.5-7.0',
+              mo: '2.5-3.0%',
+              cec: '15-20 meq/100g',
+              saturation: '80-85%',
+              elements: {
+                azote: 'Moyen (1.5-2.0 g/kg)',
+                phosphore: 'Satisfaisant (P2O5 > 100 mg/kg)',
+                potassium: 'Bon (K2O > 200 mg/kg)',
+                calcium: 'Correct (Ca++ > 2000 mg/kg)',
+                magnesium: 'Équilibré (Mg++ > 100 mg/kg)',
+                oligo_elements: 'Pas de carence marquée'
+              }
+            },
+            biologiques: {
+              activite: 'Bonne activité biologique globale',
+              vers_terre: '100-150 individus/m²',
+              microorganismes: 'Population diversifiée et active'
+            },
+            physiques: {
+              densite: '1.3-1.4 g/cm³',
+              compaction: 'Risque modéré en conditions humides',
+              hydromorphie: 'Temporaire en profondeur'
+            }
+          },
+          potentiel: {
+            agricole: {
+              cultures_adaptees: [
+                'Céréales à paille',
+                'Maïs',
+                'Colza',
+                'Légumineuses'
+              ]
+            }
+          }
+        }
+      };
+    } else if (userPrompt.includes('pratiques') || systemPrompt.includes('pratiques')) {
+      return {
+        type: 'practices',
+        data: {
+          systeme: {
+            rotations: {
+              evaluation: 'Rotation sur 3 ans',
+              points_forts: 'Alternance céréales/oléagineux',
+              points_ameliorer: 'Introduire plus de légumineuses'
+            },
+            semis: {
+              evaluation: 'Conventionnel',
+              adaptation_climat: 'Dates à optimiser',
+              risques: 'Érosion possible'
+            },
+            adequation: {
+              evaluation: 'Moyenne',
+              sol: 'Compatible',
+              climat: 'Adaptations nécessaires'
+            }
+          },
+          travail_sol: {
+            pratiques: {
+              evaluation: 'Labour occasionnel',
+              impact_structure: 'Risque de compaction',
+              recommandations: 'Réduire le travail profond'
+            },
+            couverts: {
+              evaluation: 'Peu développés',
+              benefices: 'Protection limitée',
+              ameliorations: 'Diversifier les espèces'
+            },
+            residus: {
+              evaluation: 'Exportation partielle',
+              gestion: 'Broyage/enfouissement',
+              suggestions: 'Maintenir plus de résidus'
+            }
+          },
+          fertilisation: {
+            evaluation: 'Conventionnelle',
+            equilibre: 'Correct',
+            optimisation: 'Possible'
+          },
+          protection: {
+            adventices: {
+              evaluation: 'Chimique dominante',
+              strategie: 'Préventif/curatif',
+              ameliorations: 'Développer alternatives'
+            },
+            phyto: {
+              evaluation: 'Usage modéré',
+              approche: 'Raisonnée',
+              alternatives: 'Biocontrôle à développer'
+            }
+          },
+          recommandations: {
+            globales: [
+              'Diversifier la rotation',
+              'Réduire le travail du sol',
+              'Augmenter la couverture'
+            ],
+            prioritaires: [
+              'Couverts végétaux',
+              'Légumineuses',
+              'Alternatives phyto'
+            ],
+            opportunites: [
+              'Certification HVE',
+              'Circuits courts',
+              'Agroforesterie'
+            ]
+          }
+        }
+      };
+    } else if (userPrompt.includes('Synthèse agronomique') || systemPrompt.includes('agriculture régénératrice')) {
+      return {
+        type: 'summary',
+        data: `🌱 Plan de transition agroécologique personnalisé
+
+## 🔍 Analyse de la situation actuelle
+
+### Atouts identifiés
+${existingStrengths.map(strength => `• ${strength}`).join('\n')}
+
+### Contraintes à gérer
+${mainConstraints.map(constraint => `• ${constraint}`).join('\n')}
+
+## 🌾 Scénarios de transition
+
+### 1️⃣ Transition progressive (3-5 ans)
+• Objectif : Réduction progressive des intrants tout en sécurisant les rendements
+• Actions clés :
+  - Introduction de couverts végétaux simples
+  - Réduction du travail du sol
+  - Test de nouvelles rotations
+• Coûts : Investissement modéré, retour sur 3-4 ans
+• Impact : Amélioration progressive de la vie du sol
+• Rentabilité : Maintien des rendements avec baisse des charges
+• Résilience : Augmentation graduelle
+
+### 2️⃣ Basculement rapide (2 ans)
+• Objectif : Transformation rapide en système résilient
+• Actions clés :
+  - Semis direct sous couvert
+  - Diversification immédiate des cultures
+  - Infrastructure agroécologique
+• Coûts : Investissement important, retour sur 2-3 ans
+• Impact : Amélioration rapide de la biodiversité
+• Rentabilité : Baisse possible à court terme, gain à moyen terme
+• Résilience : Forte après la période de transition
+
+### 3️⃣ Excellence régénérative (5-10 ans)
+• Objectif : Ferme 100% régénérative et autonome
+• Actions clés :
+  - Agroforesterie
+  - Polyculture-élevage
+  - Certification bio
+• Coûts : Investissement majeur, retour sur 5-7 ans
+• Impact : Transformation complète de l'écosystème
+• Rentabilité : Forte valeur ajoutée à long terme
+• Résilience : Maximale
+
+## 📋 Plan d'action recommandé
+
+### Phase 1 : Diagnostic & préparation (6-12 mois)
+• Analyses de sol approfondies
+• Formation aux pratiques régénératives
+• Planification des investissements
+
+### Phase 2 : Mise en œuvre (2-5 ans)
+• Réduction travail du sol
+• Introduction couverts végétaux
+• Diversification des rotations
+
+### Phase 3 : Optimisation (5 ans+)
+• Certification
+• Développement circuits courts
+• Innovation continue
+
+## 📊 Objectifs de performance
+• Matière organique : +0,5% par an
+• Biodiversité : x3 en 5 ans
+• Intrants : -50% en 3 ans
+• Carbone : Bilan positif dès l'année 3
+
+💡 Recommandation : Au vu de votre contexte, le scénario 1 (transition progressive) semble le plus adapté pour débuter, avec une évolution possible vers le scénario 2 après 2-3 ans de pratique.`,
+        step: 'summary'
+      };
     } else {
-      setSuggestions([]);
+      return {
+        type: 'location',
+        data: {
+          nom: userPrompt,
+          departement: "Yvelines (78)",
+          region: "Île-de-France",
+          description: "Commune située dans la vallée de la Seine",
+          climat: "Climat océanique dégradé"
+        }
+      };
     }
-  }, [currentStep]);
+  };
 
-  useEffect(() => {
-    // Message de bienvenue initial
-    if (messages.length === 0) {
-      setMessages([{
-        type: 'bot',
-        content: "Bonjour ! Je suis votre conseiller en agriculture régénératrice. Je vais vous accompagner dans votre transition vers des pratiques agricoles durables et économiquement viables. Pour commencer, pouvez-vous me dire où se situe votre exploitation ?",
-        step: 'location'
-      }]);
-    }
-  }, []);
+  // Fonction pour formater la réponse climatique
+  const formatClimateResponse = (data) => {
+    return `🌤️ Analyse climatique détaillée :
+
+🌧️ Précipitations
+• Pluviométrie annuelle : ${data.precipitations.annuelle}
+• Répartition : ${data.precipitations.repartition}
+• Périodes sèches : ${data.precipitations.periodes_seches}
+• Risque d'inondation : ${data.precipitations.risque_inondation}
+
+🌡️ Températures
+• Moyenne annuelle : ${data.temperatures.moyennes.annuelle}
+• Printemps : ${data.temperatures.moyennes.printemps}
+• Été : ${data.temperatures.moyennes.ete}
+• Automne : ${data.temperatures.moyennes.automne}
+• Hiver : ${data.temperatures.moyennes.hiver}
+
+❄️ Gel
+• Première gelée : ${data.temperatures.gel.premiere_gelee}
+• Dernière gelée : ${data.temperatures.gel.derniere_gelee}
+• Jours de gel : ${data.temperatures.gel.jours_gel}
+
+☀️ Chaleur
+• Jours chauds : ${data.temperatures.chaleur.jours_chauds}
+• Périodes : ${data.temperatures.chaleur.periodes}
+
+⚠️ Événements extrêmes
+• Orages : ${data.evenements_extremes.frequence.orages}
+• Grêle : ${data.evenements_extremes.frequence.grele}
+• Sécheresse : ${data.evenements_extremes.frequence.secheresse}
+
+🌾 Impact sur les cultures
+${data.evenements_extremes.impacts.cultures}
+${data.evenements_extremes.impacts.sol}
+
+📋 Recommandations
+
+Adaptations culturales :
+${data.recommandations.adaptations.map(item => '• ' + item).join('\n')}
+
+Mesures préventives :
+${data.recommandations.preventions.map(item => '• ' + item).join('\n')}
+
+Opportunités :
+${data.recommandations.opportunites.map(item => '• ' + item).join('\n')}`;
+  };
+
+  // Fonction pour formater la réponse pédologique
+  const formatSoilResponse = (data) => {
+    return `🌱 Analyse pédologique détaillée :
+
+📊 Caractéristiques physiques
+• Texture : ${data.caracteristiques.texture.classification}
+  - Argile : ${data.caracteristiques.texture.argile}
+  - Limon : ${data.caracteristiques.texture.limon}
+  - Sable : ${data.caracteristiques.texture.sable}
+• Structure : ${data.caracteristiques.structure.type}
+  - Stabilité : ${data.caracteristiques.structure.stabilite}
+  - Porosité : ${data.caracteristiques.structure.porosite}
+• Profondeur : ${data.caracteristiques.profondeur.utile}
+  - Obstacles : ${data.caracteristiques.profondeur.obstacles}
+  - Réserve en eau : ${data.caracteristiques.profondeur.reserve_eau}
+
+🧪 Propriétés chimiques
+• pH : ${data.proprietes.chimiques.ph}
+• Matière organique : ${data.proprietes.chimiques.mo}
+• CEC : ${data.proprietes.chimiques.cec}
+• Saturation : ${data.proprietes.chimiques.saturation}
+
+📝 Éléments nutritifs
+• Azote : ${data.proprietes.chimiques.elements.azote}
+• Phosphore : ${data.proprietes.chimiques.elements.phosphore}
+• Potassium : ${data.proprietes.chimiques.elements.potassium}
+• Calcium : ${data.proprietes.chimiques.elements.calcium}
+• Magnésium : ${data.proprietes.chimiques.elements.magnesium}
+• Oligo-éléments : ${data.proprietes.chimiques.elements.oligo_elements}
+
+🦠 Activité biologique
+• État général : ${data.proprietes.biologiques.activite}
+• Vers de terre : ${data.proprietes.biologiques.vers_terre}
+• Microorganismes : ${data.proprietes.biologiques.microorganismes}
+
+⚠️ État physique
+• Densité : ${data.proprietes.physiques.densite}
+• Risque de compaction : ${data.proprietes.physiques.compaction}
+• Hydromorphie : ${data.proprietes.physiques.hydromorphie}
+
+🌾 Potentiel agricole
+Cultures adaptées :
+${data.potentiel.agricole.cultures_adaptees.map(culture => '• ' + culture).join('\n')}
+
+📋 Recommandations
+• Travail du sol adapté à la texture
+• Surveillance régulière de la structure
+• Maintien d'une bonne activité biologique
+• Apports organiques réguliers recommandés`;
+  };
+
+  // Fonction pour formater la réponse des pratiques
+  const formatPracticesResponse = (data) => {
+    return `🚜 Analyse des pratiques agricoles :
+
+📊 Système de culture
+• Rotations : ${data.systeme.rotations.evaluation}
+  - Points forts : ${data.systeme.rotations.points_forts}
+  - Points à améliorer : ${data.systeme.rotations.points_ameliorer}
+• Périodes de semis : ${data.systeme.semis.evaluation}
+  - Adaptation climat : ${data.systeme.semis.adaptation_climat}
+  - Risques identifiés : ${data.systeme.semis.risques}
+• Adéquation contexte : ${data.systeme.adequation.evaluation}
+  - Sol : ${data.systeme.adequation.sol}
+  - Climat : ${data.systeme.adequation.climat}
+
+🌱 Travail du sol
+• Pratiques actuelles : ${data.travail_sol.pratiques.evaluation}
+  - Impact structure : ${data.travail_sol.pratiques.impact_structure}
+  - Recommandations : ${data.travail_sol.pratiques.recommandations}
+• Couverts végétaux : ${data.travail_sol.couverts.evaluation}
+  - Bénéfices : ${data.travail_sol.couverts.benefices}
+  - Pistes amélioration : ${data.travail_sol.couverts.ameliorations}
+• Résidus : ${data.travail_sol.residus.evaluation}
+  - Gestion : ${data.travail_sol.residus.gestion}
+  - Suggestions : ${data.travail_sol.residus.suggestions}
+
+🌿 Fertilisation et protection
+• Fertilisation : ${data.fertilisation.evaluation}
+  - Équilibre : ${data.fertilisation.equilibre}
+  - Optimisation : ${data.fertilisation.optimisation}
+• Adventices : ${data.protection.adventices.evaluation}
+  - Stratégie : ${data.protection.adventices.strategie}
+  - Améliorations : ${data.protection.adventices.ameliorations}
+• Phytosanitaire : ${data.protection.phyto.evaluation}
+  - Approche : ${data.protection.phyto.approche}
+  - Alternatives : ${data.protection.phyto.alternatives}
+
+📋 Recommandations globales
+${data.recommandations.globales.map(item => '• ' + item).join('\n')}
+
+🎯 Actions prioritaires
+${data.recommandations.prioritaires.map(item => '• ' + item).join('\n')}
+
+💡 Opportunités d'amélioration
+${data.recommandations.opportunites.map(item => '• ' + item).join('\n')}`;
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">
       <div className="p-4 border-b">
-        <StepIndicator />
-        <ProgressBar />
+        <StepIndicator currentStep={currentStep} />
+        <ProgressBar currentStep={currentStep} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex ${
+              message.type === 'user' ? 'justify-end' : 'justify-start'
+            }`}
           >
             <div
               className={`max-w-[80%] p-3 rounded-lg ${
                 message.type === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-800'
+                  ? 'bg-blue-500 text-white'
+                  : message.type === 'error'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-gray-100'
               }`}
             >
-              {formatMessageContent(message.content, message.type)}
+              <pre className="whitespace-pre-wrap font-sans">
+                {message.content}
+              </pre>
             </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      {suggestions.length > 0 && (
-        <div className="p-2 bg-gray-50 border-t">
-          <p className="text-sm text-gray-600 mb-2">Exemples de réponses :</p>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((suggestion, index) => (
-              <button
-                key={index}
-                onClick={() => setUserInput(suggestion)}
-                className="text-sm px-3 py-1 bg-white border border-gray-300 rounded-full hover:bg-gray-100 hover:border-blue-500 transition-colors duration-200"
-              >
-                {suggestion.length > 50 ? suggestion.substring(0, 47) + '...' : suggestion}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="p-4 border-t">
-        <div className="flex space-x-2">
+        <div className="flex gap-2">
           <input
             type="text"
             value={userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            placeholder={currentStep === 'location' ? "Entrez le nom de votre commune..." : "Votre réponse..."}
-            className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isValidating}
+            onChange={handleUserInput}
+            placeholder="Entrez votre message..."
+            className="flex-1 p-2 border rounded"
+            disabled={isLoading}
           />
           <button
             type="submit"
-            disabled={isValidating || !userInput.trim()}
-            className={`px-4 py-2 rounded-lg ${
-              isValidating || !userInput.trim()
-                ? 'bg-gray-300 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-            } text-white`}
+            disabled={isLoading || !userInput.trim()}
+            className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
           >
-            {isValidating ? 'Envoi...' : 'Envoyer'}
+            {isLoading ? 'Envoi...' : 'Envoyer'}
           </button>
         </div>
-        {inputError && (
-          <p className="mt-2 text-red-500 text-sm">{inputError}</p>
+        {error && (
+          <p className="mt-2 text-sm text-red-600">{error}</p>
         )}
       </form>
     </div>
